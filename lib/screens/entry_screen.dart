@@ -49,25 +49,6 @@ class EntryScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: 300,
-                height: 60,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pushNamed(context, '/calculator3'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purple[400],
-                    padding: const EdgeInsets.all(8.0),
-                  ),
-                  child: const Text(
-                    'Завдання 3',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),

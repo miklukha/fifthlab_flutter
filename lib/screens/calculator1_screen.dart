@@ -1,39 +1,42 @@
 import 'package:flutter/material.dart';
-import 'dart:math';
 
 // дані систем
 class SystemData {
-  final double current;
-  final double switchOffCurrentTime;
-  final double sm;
+  final int lengthPL110;
+  final int connectionN;
 
   SystemData({
-    this.current = 0.0,
-    this.switchOffCurrentTime = 0.0,
-    this.sm = 0.0,
+    this.lengthPL110 = 0,
+    this.connectionN = 0,
   });
 
   SystemData copyWith({
-    double? current,
-    double? switchOffCurrentTime,
-    double? sm,
+    int? lengthPL110,
+    int? connectionN,
   }) {
     return SystemData(
-      current: current ?? this.current,
-      switchOffCurrentTime: switchOffCurrentTime ?? this.switchOffCurrentTime,
-      sm: sm ?? this.sm,
+      lengthPL110: lengthPL110 ?? this.lengthPL110,
+      connectionN: connectionN ?? this.connectionN,
     );
   }
 }
 
 // результати розрахунків
 class CalculationResults {
-  final double section;
-  final double increaseMinimum;
+  final double failureRate;
+  final double recoveryTime;
+  final double emergencyDowntime;
+  final double plannedDowntime;
+  final double failureRateBoth;
+  final double failureRateWithSection;
 
   CalculationResults({
-    this.section = 0.0,
-    this.increaseMinimum = 0.0,
+    this.failureRate = 0.0,
+    this.recoveryTime = 0.0,
+    this.emergencyDowntime = 0.0,
+    this.plannedDowntime = 0.0,
+    this.failureRateBoth = 0.0,
+    this.failureRateWithSection = 0.0,
   });
 }
 
@@ -48,45 +51,70 @@ class _Calculator1ScreenState extends State<Calculator1Screen> {
   SystemData data = SystemData();
   CalculationResults? results;
 
-  void updateData(String field, double value) {
+  void updateData(String field, int value) {
     setState(() {
       switch (field) {
-        case 'current':
-          data = data.copyWith(current: value);
-        case 'switchOffCurrentTime':
-          data = data.copyWith(switchOffCurrentTime: value);
-        case 'sm':
-          data = data.copyWith(sm: value);
+        case 'lengthPL110':
+          data = data.copyWith(lengthPL110: value);
+        case 'connectionN':
+          data = data.copyWith(connectionN: value);
       }
     });
   }
 
   CalculationResults calculateResults(SystemData data) {
-    // напруга
-    const voltage = 10;
-    // економічна густина струму для кабелів з паперовою ізоляцією для Тм = 4000год
-    const density = 1.4;
-    // для кабелів з алюмінієвими суцільними жилами,
-    // паперовою ізоляцією і номінальною напругою 6 кВ
-    const ct = 92.0;
+    // частоти відмов
+    const failureRateV110 = 0.01; // В-110 кВ (елегазовий)
+    const failureRateV10 = 0.02; // В-10 кВ (малооливний)
+    const failureRateT110 = 0.015; // Т-110 кВ
+    final failureRatePL110 = 0.007 * data.lengthPL110; // ПЛ-110 кВ
+    final failureRate10 = 0.03 * data.connectionN; // збірні шини 10кВ
 
-    // розрахунковий струм для нормального режиму
-    final ratedCurrentNormal = (data.sm / 2) / (sqrt(3.0) * voltage);
+    // тривалості відновлення
+    const recoveryTimeV110 = 30.0; // В-110 кВ (елегазовий)
+    const recoveryTimeV10 = 15.0; // В-10 кВ (малооливний)
+    const recoveryTimeT110 = 100.0; // Т-110 кВ
+    const recoveryTimePL110 = 10.0; // ПЛ-110 кВ
+    const recoveryTime10 = 2.0; // збірні шини 10кВ
 
-    // розрахунковий струм для післяаварійного режиму
-    // ignore: unused_local_variable
-    final ratedCurrentAfterEmergency = 2 * ratedCurrentNormal;
+    // найбільше значення коефіцієнта планового простою (в даному випадку для Т-110 кВ)
+    const plannedDowntimeMax = 43.0;
 
-    // економічний переріз
-    final section = ratedCurrentNormal / density;
+    // частота відмов одноколової системи - сума частот відмов одноколової системи
+    final failureRate = failureRateV110 +
+        failureRateV10 +
+        failureRateT110 +
+        failureRatePL110 +
+        failureRate10;
 
-    // мінімум збільшення перерізу жил кабелю
-    final increaseMinimum =
-        data.current * 1000 * sqrt(data.switchOffCurrentTime) / ct;
+    // середня тривалість відновлення
+    final recoveryTime = (failureRateV110 * recoveryTimeV110 +
+            failureRatePL110 * recoveryTimePL110 +
+            failureRateT110 * recoveryTimeT110 +
+            failureRateV10 * recoveryTimeV10 +
+            failureRate10 * recoveryTime10) /
+        failureRate;
+
+    // кофіцієнт аварійного простою одноколової системи
+    final emergencyDowntime = failureRate * recoveryTime / 8760;
+
+    // кофіцієнт планового простою одноколової системи
+    final plannedDowntime = 1.2 * plannedDowntimeMax / 8760;
+
+    // частота відмов одночасно двох кіл двоколової системи
+    final failureRateBoth =
+        2 * failureRate * (emergencyDowntime + plannedDowntime);
+
+    // частота відмов двоколової системи з урахуванням секційного вимикача
+    final failureRateWithSection = failureRateBoth + failureRateV10;
 
     return CalculationResults(
-      section: section,
-      increaseMinimum: increaseMinimum,
+      failureRate: failureRate,
+      recoveryTime: recoveryTime,
+      emergencyDowntime: emergencyDowntime,
+      plannedDowntime: plannedDowntime,
+      failureRateBoth: failureRateBoth,
+      failureRateWithSection: failureRateWithSection,
     );
   }
 
@@ -104,31 +132,30 @@ class _Calculator1ScreenState extends State<Calculator1Screen> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
-                  'Калькулятор для розрахунку струму',
+                  'Калькулятор порівняння надійності систем електропередачі',
                   style: Theme.of(context).textTheme.headlineMedium,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Вибрати кабелі для живлення двотрансформаторної підстанції системи внутрішнього елкетропостачання підприємства напругою 10 кВ. Струм К3 Ік = 2.5 кА, фіктиіний час вимикання струму КЗ tф = 2.5с. Потужність ТП - 2х1000 кВ А. Розрахункове навантаження Sм = 1300 кВ А, Тм = 4000 год.',
+                const Text(
+                  'Одноколова система містить: елегазовий вимикач 100 кВ, ПЛ-110 кВ довжиною 10 км, трансформатор 110/10 кВ, ввідний вимикач 10 кВ і 6 приєднань 10 кВ.',
+                  textAlign: TextAlign.justify,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Двоколова система складається з двох ідентичних одноколових і секційного вимикача 10 кВ.',
                   textAlign: TextAlign.justify,
                 ),
                 const SizedBox(height: 16),
                 InputField(
-                  label: 'Струм КЗ, кА',
-                  value: data.current,
-                  onChanged: (value) => updateData('current', value),
+                  label: 'Довжина ПЛ-110 кВ, км',
+                  value: data.lengthPL110,
+                  onChanged: (value) => updateData('lengthPL110', value),
                 ),
                 InputField(
-                  label: 'Фіктивний час вимикання струму КЗ, с',
-                  value: data.switchOffCurrentTime,
-                  onChanged: (value) =>
-                      updateData('switchOffCurrentTime', value),
-                ),
-                InputField(
-                  label: 'Sm, кВ',
-                  value: data.sm,
-                  onChanged: (value) => updateData('sm', value),
+                  label: 'Кількість приєднань 10 кВ',
+                  value: data.connectionN,
+                  onChanged: (value) => updateData('connectionN', value),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -180,8 +207,8 @@ class _Calculator1ScreenState extends State<Calculator1Screen> {
 
 class InputField extends StatefulWidget {
   final String label;
-  final double value;
-  final Function(double) onChanged;
+  final int value;
+  final Function(int) onChanged;
 
   const InputField({
     super.key,
@@ -201,17 +228,16 @@ class _InputFieldState extends State<InputField> {
   void initState() {
     super.initState();
     _controller = TextEditingController(
-      text: widget.value == 0.0 ? '' : widget.value.toString(),
+      text: widget.value == 0 ? '' : widget.value.toString(),
     );
   }
 
   @override
   void didUpdateWidget(covariant InputField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.value != oldWidget.value &&
-        !_controller.text.contains(RegExp(r'[.,]$'))) {
+    if (widget.value != oldWidget.value) {
       final selection = _controller.selection;
-      _controller.text = widget.value == 0.0 ? '' : widget.value.toString();
+      _controller.text = widget.value == 0 ? '' : widget.value.toString();
       _controller.selection = selection;
     }
   }
@@ -232,14 +258,13 @@ class _InputFieldState extends State<InputField> {
           labelText: widget.label,
           border: const OutlineInputBorder(),
         ),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        keyboardType: TextInputType.number,
         onChanged: (value) {
           if (value.isEmpty) {
-            widget.onChanged(0.0);
+            widget.onChanged(0);
             return;
           }
-          final normalizedValue = value.replaceAll(',', '.');
-          final number = double.tryParse(normalizedValue);
+          final number = int.tryParse(value);
           if (number != null) {
             widget.onChanged(number);
           }
@@ -266,11 +291,26 @@ class ResultsDisplay extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         ResultSection(
-          title: 'Результати:',
+          title: 'Частота відмов:',
           items: {
-            'Економічний переріз': ResultValue(results.section, 'мм2'),
-            'Переріз має бути збільшений мінімум до':
-                ResultValue(results.increaseMinimum, 'мм2'),
+            'одноколової системи': ResultValue(results.failureRate, 'рік-1'),
+            'одночасно двох кіл \nдвоколової системи':
+                ResultValue(results.failureRateBoth, 'рік-1'),
+            'двоколової системи з \n(секційний вимикач)':
+                ResultValue(results.failureRateWithSection, 'рік-1'),
+          },
+        ),
+        ResultSection(
+          title: 'Кофіцієнт простою одноколової системи:',
+          items: {
+            'аварійного:': ResultValue(results.emergencyDowntime),
+            'планового:': ResultValue(results.plannedDowntime),
+          },
+        ),
+        ResultSection(
+          title: 'Середня тривалість відновлення:',
+          items: {
+            '': ResultValue(results.recoveryTime, 'год'),
           },
         ),
       ],
@@ -313,7 +353,7 @@ class ResultSection extends StatelessWidget {
                 children: [
                   Text(entry.key),
                   Text(
-                    '${entry.value.value.toStringAsFixed(1)} ${entry.value.unit}',
+                    '${entry.value.value.toStringAsFixed(4)} ${entry.value.unit ?? ""}',
                   ),
                 ],
               ),

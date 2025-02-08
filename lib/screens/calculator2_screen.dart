@@ -1,31 +1,34 @@
-// ignore_for_file: unused_local_variable
-
 import 'package:flutter/material.dart';
-import 'dart:math';
 
-// вхідні дані
-class Data {
-  final int power;
+// дані збитків
+class LossesData {
+  final double lossesEmergencyDowntime;
+  final double lossesPlannedDowntime;
 
-  Data({
-    this.power = 0,
+  LossesData({
+    this.lossesEmergencyDowntime = 0.0,
+    this.lossesPlannedDowntime = 0.0,
   });
 
-  Data copyWith({
-    int? power,
+  LossesData copyWith({
+    double? lossesEmergencyDowntime,
+    double? lossesPlannedDowntime,
   }) {
-    return Data(
-      power: power ?? this.power,
+    return LossesData(
+      lossesEmergencyDowntime:
+          lossesEmergencyDowntime ?? this.lossesEmergencyDowntime,
+      lossesPlannedDowntime:
+          lossesPlannedDowntime ?? this.lossesPlannedDowntime,
     );
   }
 }
 
 // результати розрахунків
 class CalculationResults {
-  final double initialCurrentValue;
+  final double mathExpectationLosses;
 
   CalculationResults({
-    this.initialCurrentValue = 0.0,
+    this.mathExpectationLosses = 0.0,
   });
 }
 
@@ -37,25 +40,25 @@ class Calculator2Screen extends StatefulWidget {
 }
 
 class _Calculator2ScreenState extends State<Calculator2Screen> {
-  Data data = Data();
+  LossesData data = LossesData();
   CalculationResults? results;
 
-  void updateData(String field, int value) {
+  void updateData(String field, double value) {
     setState(() {
       switch (field) {
-        case 'power':
-          data = data.copyWith(power: value);
+        case 'lossesEmergencyDowntime':
+          data = data.copyWith(lossesEmergencyDowntime: value);
+          break;
+        case 'lossesPlannedDowntime':
+          data = data.copyWith(lossesPlannedDowntime: value);
+          break;
       }
     });
   }
 
-  CalculationResults calculateResults(Data data) {
-    // середня номінальна напруга точки, в якій виникає КЗ
-    const usn = 10.5;
-    // номінальна потужність трансформатора
-    const snomt = 6.3;
-    const uk = 10.5;
-
+  CalculationResults calculateResults(LossesData data) {
+    // частота відмов
+    const failureRate = 0.01;
     // середній час відновлення трансформатора напругою 35 кВ
     const recoveryTimeT = 45 * 0.001;
     // середній час планового простою трансформатора напругою 35 кВ
@@ -63,18 +66,19 @@ class _Calculator2ScreenState extends State<Calculator2Screen> {
     const pm = 5.12 * 1000;
     const tm = 6451;
 
-    // опори елементів заступної схеми
-    final xc = pow(usn, 2) / data.power;
-    final xt = (uk / 100) * (pow(usn, 2) / snomt);
+    // математичне сподівання аварійного недовідпущення електроенергії
+    final mathExpectationEmergency = failureRate * recoveryTimeT * pm * tm;
 
-    // сумарний опір для точки К1
-    final totalResistance = xc + xt;
+    // математичне сподівання планового недовідпущення електроенергії
+    final mathExpectationPlanned = averageTime * pm * tm;
 
-    // початкове діюче значення струму трифазного КЗ
-    final initialCurrentValue = usn / (sqrt(3.0) * totalResistance);
+    // математичне сподівання збитків від переривання електропостачання
+    final mathExpectationLosses =
+        data.lossesEmergencyDowntime * mathExpectationEmergency +
+            data.lossesPlannedDowntime * mathExpectationPlanned;
 
     return CalculationResults(
-      initialCurrentValue: initialCurrentValue,
+      mathExpectationLosses: mathExpectationLosses,
     );
   }
 
@@ -92,20 +96,22 @@ class _Calculator2ScreenState extends State<Calculator2Screen> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
-                  'Калькулятор визначення струмів КЗ на шинах 10 кВ ГПП',
+                  'Калькулятор рахування збитків від перерв електропостачання',
                   style: Theme.of(context).textTheme.headlineMedium,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Визначити струми К3 на шинах 10 кВ ГПП. Потужність К3 200 МВ А. Для перевірки вибраних кабелів та вимикачів необіхдно розрахувати струми К3 на шинах низької напруги ГПП',
-                  textAlign: TextAlign.justify,
-                ),
-                const SizedBox(height: 16),
                 InputField(
-                  label: 'Потужність КЗ',
-                  value: data.power,
-                  onChanged: (value) => updateData('power', value),
+                  label: 'Збитки (аварійні вимкнення)',
+                  value: data.lossesEmergencyDowntime,
+                  onChanged: (value) =>
+                      updateData('lossesEmergencyDowntime', value),
+                ),
+                InputField(
+                  label: 'Збитки (планові вимкнення)',
+                  value: data.lossesPlannedDowntime,
+                  onChanged: (value) =>
+                      updateData('lossesPlannedDowntime', value),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -157,8 +163,8 @@ class _Calculator2ScreenState extends State<Calculator2Screen> {
 
 class InputField extends StatefulWidget {
   final String label;
-  final int value;
-  final Function(int) onChanged;
+  final double value;
+  final Function(double) onChanged;
 
   const InputField({
     super.key,
@@ -178,7 +184,7 @@ class _InputFieldState extends State<InputField> {
   void initState() {
     super.initState();
     _controller = TextEditingController(
-      text: widget.value == 0 ? '' : widget.value.toString(),
+      text: widget.value == 0.0 ? '' : widget.value.toString(),
     );
   }
 
@@ -187,7 +193,7 @@ class _InputFieldState extends State<InputField> {
     super.didUpdateWidget(oldWidget);
     if (widget.value != oldWidget.value) {
       final selection = _controller.selection;
-      _controller.text = widget.value == 0 ? '' : widget.value.toString();
+      _controller.text = widget.value == 0.0 ? '' : widget.value.toString();
       _controller.selection = selection;
     }
   }
@@ -211,10 +217,10 @@ class _InputFieldState extends State<InputField> {
         keyboardType: TextInputType.number,
         onChanged: (value) {
           if (value.isEmpty) {
-            widget.onChanged(0);
+            widget.onChanged(0.0);
             return;
           }
-          final number = int.tryParse(value);
+          final number = double.tryParse(value);
           if (number != null) {
             widget.onChanged(number);
           }
@@ -240,16 +246,41 @@ class ResultsDisplay extends StatelessWidget {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
-        ResultSection(
-          title: 'Результати:',
-          items: {
-            'Початкове діюче значення\nструму трифазного КЗ':
-                ResultValue(results.initialCurrentValue, 'кА'),
-          },
+        SingleChildScrollView(
+          // Додано SingleChildScrollView
+          child: ResultSection(
+            title: 'Результати:',
+            items: {
+              'Математичне сподівання збитків\nвід переривання електропостачання:':
+                  ResultValue(results.mathExpectationLosses, ''),
+            },
+          ),
         ),
       ],
     );
   }
+
+  // @override
+  // Widget build(BuildContext context) {
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       const SizedBox(height: 16),
+  //       Text(
+  //         'Результати розрахунків:',
+  //         style: Theme.of(context).textTheme.titleLarge,
+  //       ),
+  //       const SizedBox(height: 8),
+  //       ResultSection(
+  //         title: 'Результати:',
+  //         items: {
+  //           'Математичне сподівання збитків\nвід переривання електропостачання:':
+  //               ResultValue(results.mathExpectationLosses, ''),
+  //         },
+  //       ),
+  //     ],
+  //   );
+  // }
 }
 
 class ResultValue {
@@ -271,28 +302,31 @@ class ResultSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 4),
-        ...items.entries.map((entry) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(entry.key),
-                  Text(
-                    '${entry.value.value.toStringAsFixed(1)} ${entry.value.unit}',
-                  ),
-                ],
-              ),
-            )),
-      ],
+    return SingleChildScrollView(
+      // Додано SingleChildScrollView
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          ...items.entries.map((entry) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: Text(entry.key)), // Додано Expanded
+                    Text(
+                      '${entry.value.value.toStringAsFixed(4)} ${entry.value.unit}',
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
     );
   }
 }
